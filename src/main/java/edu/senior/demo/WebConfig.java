@@ -10,6 +10,7 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
+
         // Allow CORS requests from React app running on localhost:5173
         registry.addMapping("/api/sse/**")
                 .allowedOrigins("http://localhost:5173")  // React app URL (updated port)
