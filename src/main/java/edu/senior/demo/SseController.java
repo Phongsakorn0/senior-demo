@@ -1,7 +1,11 @@
 package edu.senior.demo;
 
+import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -16,7 +20,20 @@ public class SseController {
     private int clientData = 0;
     private static final Logger logger = Logger.getLogger(SseController.class.getName());
 
-    public static class NotifyRequest { // Make it static
+    // Separate CORS configuration class
+    @Configuration
+    public static class CorsConfig implements WebMvcConfigurer {
+        @Override
+        public void addCorsMappings(CorsRegistry registry) {
+            registry.addMapping("/**")
+                    .allowedOrigins("*")
+                    .allowedMethods("*")
+                    .allowedHeaders("*")
+                    .maxAge(3600);
+        }
+    }
+
+    public static class NotifyRequest {
         private int message;
 
         public int getMessage() {
@@ -28,8 +45,6 @@ public class SseController {
         }
     }
 
-
-    // Subscribe client to SSE
     @GetMapping("/subscribe")
     public SseEmitter subscribe() {
         SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);
@@ -50,62 +65,57 @@ public class SseController {
         return emitter;
     }
 
-    // Notify clients with a random number
     @PostMapping("/notify")
-    public void notifyClients(@RequestBody NotifyRequest request) {
+    public ResponseEntity<String> notifyClients(@RequestBody NotifyRequest request) {
         if (emitters.isEmpty()) {
             logger.warning("No clients subscribed to receive data!");
-            return;
-        }
-        double MNumber = request.getMessage(); // Extract the number
-        logger.info("Notifying clients with number: " + MNumber);
-        sendToClients(MNumber);
-    }
-
-    @GetMapping("/getupdatedata")
-    public String getUpdatedData() {
-        // Check if clients are subscribed, if not log a warning
-        if (emitters.isEmpty()) {
-            logger.warning("No clients subscribed to receive data!");
-            return "No clients subscribed to receive data!";
+            return ResponseEntity.badRequest().body("No clients connected");
         }
 
-        // Return the updated data
-        logger.info("Returning updated client data: " + clientData);
-        return "Updated client data: " + clientData;
+        double mNumber = request.getMessage();
+        logger.info("Notifying clients with number: " + mNumber);
+        sendToClients(mNumber);
+        return ResponseEntity.ok("Notification sent");
     }
 
+    @GetMapping("/getclientdata")
+    public ResponseEntity<Integer> getClientData() {
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(clientData);
+    }
 
-    // Receive updated data from client
     @PostMapping("/update")
-    public String updateData(@RequestParam int data) {
-        this.clientData = data;
-        logger.info("Client data updated to: " + clientData);
-        return "Data updated to: " + clientData;
+    public ResponseEntity<Void> updateData(@RequestParam int data) {
+        clientData = data;
+        logger.info("Updated client data to: " + data);
+        return ResponseEntity.ok().build();
     }
 
-    // Send updated data back to clients
     @PostMapping("/get-updated-data")
-    public void sendUpdatedData() {
+    public ResponseEntity<String> sendUpdatedData() {
         if (emitters.isEmpty()) {
             logger.warning("No clients subscribed to receive updated data!");
-            return;
+            return ResponseEntity.badRequest().body("No active connections");
         }
+
         logger.info("Sending updated client data to clients: " + clientData);
         sendToClients(clientData);
+        return ResponseEntity.ok("Data update initiated");
     }
 
     private void sendToClients(Object message) {
-        for (SseEmitter emitter : emitters) {
+        emitters.forEach(emitter -> {
             try {
                 emitter.send(SseEmitter.event()
                         .name("data-event")
                         .data(message, MediaType.APPLICATION_JSON));
                 logger.info("Message sent to client: " + message);
             } catch (IOException e) {
+                emitter.completeWithError(e);
                 emitters.remove(emitter);
-                logger.warning("Failed to send message to client. Removing emitter.");
+                logger.warning("Removed failed emitter: " + e.getMessage());
             }
-        }
+        });
     }
 }
