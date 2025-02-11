@@ -16,6 +16,19 @@ public class SseController {
     private int clientData = 0;
     private static final Logger logger = Logger.getLogger(SseController.class.getName());
 
+    public static class NotifyRequest { // Make it static
+        private int message;
+
+        public int getMessage() {
+            return message;
+        }
+
+        public void setMessage(int message) {
+            this.message = message;
+        }
+    }
+
+
     // Subscribe client to SSE
     @GetMapping("/subscribe")
     public SseEmitter subscribe() {
@@ -39,15 +52,29 @@ public class SseController {
 
     // Notify clients with a random number
     @PostMapping("/notify")
-    public void notifyClients() {
+    public void notifyClients(@RequestBody NotifyRequest request) {
         if (emitters.isEmpty()) {
             logger.warning("No clients subscribed to receive data!");
             return;
         }
-        double randomNumber = 10;
-        logger.info("Notifying clients with random number: " + randomNumber);
-        sendToClients(randomNumber);
+        double MNumber = request.getMessage(); // Extract the number
+        logger.info("Notifying clients with number: " + MNumber);
+        sendToClients(MNumber);
     }
+
+    @GetMapping("/getupdatedata")
+    public String getUpdatedData() {
+        // Check if clients are subscribed, if not log a warning
+        if (emitters.isEmpty()) {
+            logger.warning("No clients subscribed to receive data!");
+            return "No clients subscribed to receive data!";
+        }
+
+        // Return the updated data
+        logger.info("Returning updated client data: " + clientData);
+        return "Updated client data: " + clientData;
+    }
+
 
     // Receive updated data from client
     @PostMapping("/update")
